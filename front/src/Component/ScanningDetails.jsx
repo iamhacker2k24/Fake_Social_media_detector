@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { 
   FaArrowLeft, 
   FaRobot, 
@@ -18,10 +18,32 @@ import {
   FaMoon,
   FaHeart,
   FaComment,
-  FaPercentage
+  FaPercentage,
+  FaCube,
+  FaShieldAlt,
+  FaCopy,
+  FaTimes,
+  FaCheck,
+  FaExternalLinkAlt,
+  FaSearch
 } from "react-icons/fa";
 
 const ScanningDetails = ({ result, onReset }) => {
+  const [isStoringBlockchain, setIsStoringBlockchain] = useState(false);
+  const [blockchainData, setBlockchainData] = useState(null);
+
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [verificationResult, setVerificationResult] = useState(null);
+
+  const [copiedField, setCopiedField] = useState(null);
+
+  const [isReporting, setIsReporting] = useState(false);
+  const [reportData, setReportData] = useState(null);
+  const [reportReason, setReportReason] = useState("Automated Neural Bot Detection");
+  const [errorMessage, setErrorMessage] = useState(null);
+
+  const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
   const parameterItems = [
     { label: "Account Creation Date", value: result.date_of_account_creation || "N/A", icon: <FaCalendarAlt className="text-pink-400" /> },
     { label: "Account Age", value: result.account_age || "N/A", icon: <FaClock className="text-cyan-400" /> },
@@ -43,6 +65,91 @@ const ScanningDetails = ({ result, onReset }) => {
     { label: "Overall Engagement Ratio", value: result.engagement_ratio || "0%", icon: <FaPercentage className="text-amber-400" /> }
   ];
 
+  const handleStoreBlockchain = async () => {
+    setIsStoringBlockchain(true);
+    setErrorMessage(null);
+    try {
+      const response = await fetch(`${API_URL}/blockchain/store`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scanResult: result })
+      });
+
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setBlockchainData(data);
+      } else {
+        setErrorMessage(data.error || "Failed to store on blockchain");
+      }
+    } catch (err) {
+      setErrorMessage(err.message || "Network error connecting to blockchain service");
+    } finally {
+      setIsStoringBlockchain(false);
+    }
+  };
+
+  const handleVerifyEvidence = async () => {
+    setIsVerifying(true);
+    setErrorMessage(null);
+    try {
+      const response = await fetch(`${API_URL}/blockchain/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scanId: result.scanId, scanResult: result })
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        setVerificationResult(data);
+      } else {
+        setErrorMessage(data.error || "Verification failed");
+      }
+    } catch (err) {
+      setErrorMessage(err.message || "Network error connecting to verification service");
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handleReportAccount = async () => {
+    setIsReporting(true);
+    setErrorMessage(null);
+    try {
+      const response = await fetch(`${API_URL}/report-account`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scanResult: result, reason: reportReason })
+      });
+
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setReportData(data);
+      } else {
+        setErrorMessage(data.error || "Failed to submit report");
+      }
+    } catch (err) {
+      setErrorMessage(err.message || "Network error connecting to report service");
+    } finally {
+      setIsReporting(false);
+    }
+  };
+
+  const handleCopy = (text, fieldName) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(fieldName);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  const bcInfo = blockchainData?.blockchain;
+  const getExplorerUrl = (txHash, networkStr) => {
+    if (!txHash) return "#";
+    if (bcInfo?.explorerUrl) return bcInfo.explorerUrl;
+    if (networkStr && networkStr.toLowerCase().includes("solana")) {
+      return `https://explorer.solana.com/tx/${txHash}?cluster=devnet`;
+    }
+    return `https://sepolia.etherscan.io/tx/${txHash}`;
+  };
+
   return (
     <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-8 relative z-10 space-y-6 font-['Fira_Code',monospace]">
       <div className="flex flex-wrap items-center justify-between gap-4 bg-[#090e17] p-4 rounded-xl border border-[#00ff66]/30">
@@ -61,27 +168,57 @@ const ScanningDetails = ({ result, onReset }) => {
         </div>
       </div>
 
+      {errorMessage && (
+        <div className="bg-red-950/40 border border-red-500/50 p-4 rounded-xl flex items-center justify-between text-red-400 text-xs font-mono">
+          <span>ERROR: {errorMessage}</span>
+          <button onClick={() => setErrorMessage(null)} className="text-gray-400 hover:text-white cursor-pointer">
+            <FaTimes />
+          </button>
+        </div>
+      )}
+
       <div className={`p-6 sm:p-8 rounded-2xl border flex flex-col md:flex-row items-center justify-between gap-6 relative overflow-hidden shadow-[0_0_40px_rgba(0,0,0,0.5)] ${
         result.isFake 
           ? "bg-red-950/20 border-red-500/50 text-red-400"
           : "bg-emerald-950/20 border-emerald-500/50 text-emerald-400"
       }`}>
         <div className="flex items-center gap-5">
-          <div className={`p-4 rounded-2xl border ${
+          <div className={`p-1.5 rounded-2xl border shrink-0 ${
             result.isFake ? "bg-red-500/10 border-red-500/40" : "bg-emerald-500/10 border-emerald-500/40"
           }`}>
-            {result.isFake ? (
-              <FaRobot className="text-5xl text-red-500 shrink-0 animate-pulse" />
-            ) : (
-              <FaUserCheck className="text-5xl text-emerald-400 shrink-0" />
-            )}
+            {result.avatarUrl ? (
+              <img 
+                src={result.avatarUrl} 
+                alt={result.name || result.username} 
+                className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl object-cover border border-[#00ff66]/40 shadow-lg"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                  const fallback = e.currentTarget.nextElementSibling;
+                  if (fallback) fallback.style.display = "flex";
+                }}
+              />
+            ) : null}
+            <div className={`w-16 h-16 sm:w-20 sm:h-20 rounded-xl items-center justify-center ${result.avatarUrl ? "hidden" : "flex"}`}>
+              {result.isFake ? (
+                <FaRobot className="text-4xl text-red-500 shrink-0 animate-pulse" />
+              ) : (
+                <FaUserCheck className="text-4xl text-emerald-400 shrink-0" />
+              )}
+            </div>
           </div>
           <div>
-            <span className={`inline-block text-[10px] font-bold px-2.5 py-0.5 rounded border uppercase mb-1 font-mono ${
-              result.isFake ? "bg-red-500/20 border-red-500/40 text-red-300" : "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
-            }`}>
-              {result.riskLevel}
-            </span>
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <span className={`inline-block text-[10px] font-bold px-2.5 py-0.5 rounded border uppercase font-mono ${
+                result.isFake ? "bg-red-500/20 border-red-500/40 text-red-300" : "bg-emerald-500/20 border-emerald-500/40 text-emerald-300"
+              }`}>
+                {result.riskLevel}
+              </span>
+              {result.name && (
+                <span className="text-xs font-bold text-cyan-400 font-mono">
+                  {result.name} (@{result.username})
+                </span>
+              )}
+            </div>
             <h2 className="text-2xl sm:text-3xl font-bold font-['Share_Tech_Mono',monospace] text-white">
               {result.isFake ? "DETECTION: FAKE / BOT ACCOUNT" : "DETECTION: AUTHENTIC HUMAN"}
             </h2>
@@ -107,6 +244,111 @@ const ScanningDetails = ({ result, onReset }) => {
               {result.confidence}%
             </span>
           </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+        <button
+          onClick={onReset}
+          className="bg-[#00ff66] text-black font-bold font-['Share_Tech_Mono',monospace] text-xs py-3 px-3 rounded-xl hover:bg-[#00ff66]/90 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_20px_rgba(0,255,102,0.3)]"
+        >
+          <FaRedo className="text-xs" />
+          <span>ANALYZE ANOTHER</span>
+        </button>
+
+        <button
+          onClick={handleStoreBlockchain}
+          disabled={isStoringBlockchain}
+          className="bg-[#040609] border border-cyan-500/50 text-cyan-400 font-bold font-['Share_Tech_Mono',monospace] text-xs py-3 px-3 rounded-xl hover:bg-cyan-500/15 hover:border-cyan-400 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_20px_rgba(0,229,255,0.2)] disabled:opacity-50"
+        >
+          <FaCube className="text-xs text-cyan-400" />
+          <span>{isStoringBlockchain ? "HASHING..." : "STORE ON BLOCKCHAIN"}</span>
+        </button>
+
+        <button
+          onClick={handleVerifyEvidence}
+          disabled={isVerifying}
+          className="bg-[#040609] border border-emerald-500/50 text-emerald-400 font-bold font-['Share_Tech_Mono',monospace] text-xs py-3 px-3 rounded-xl hover:bg-emerald-500/15 hover:border-emerald-400 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_20px_rgba(16,185,129,0.2)] disabled:opacity-50"
+        >
+          <FaSearch className="text-xs text-emerald-400" />
+          <span>{isVerifying ? "VERIFYING..." : "VERIFY EVIDENCE"}</span>
+        </button>
+
+        <button
+          onClick={() => setIsReporting(true)}
+          className="bg-[#040609] border border-red-500/50 text-red-400 font-bold font-['Share_Tech_Mono',monospace] text-xs py-3 px-3 rounded-xl hover:bg-red-500/15 hover:border-red-400 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_20px_rgba(239,68,68,0.2)]"
+        >
+          <FaShieldAlt className="text-xs text-red-500" />
+          <span>REPORT FAKE ACCOUNT</span>
+        </button>
+      </div>
+
+      <div className="bg-[#090e17] border border-cyan-500/40 rounded-2xl p-5 space-y-4 shadow-[0_0_30px_rgba(0,229,255,0.1)] font-mono">
+        <div className="flex items-center justify-between border-b border-cyan-500/20 pb-3">
+          <div className="flex items-center gap-2 text-cyan-400 font-['Share_Tech_Mono',monospace]">
+            <FaCube className="text-base" />
+            <h3 className="text-sm font-bold tracking-wider">BLOCKCHAIN AUDIT & IMMUTABLE EVIDENCE LEDGER</h3>
+          </div>
+          <span className="text-[11px] px-2.5 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/15 text-emerald-400 font-bold">
+            STATUS: {bcInfo ? "VERIFIED & REGISTERED" : "READY FOR ON-CHAIN STORAGE"}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 text-xs">
+          <div className="bg-[#040609] p-3 rounded-xl border border-gray-800">
+            <span className="text-gray-400 text-[10px] block">NETWORK ARCHITECTURE</span>
+            <span className="text-white font-bold">{bcInfo?.network || "Solana Devnet / Ethereum Sepolia"}</span>
+          </div>
+
+          <div className="bg-[#040609] p-3 rounded-xl border border-gray-800">
+            <span className="text-gray-400 text-[10px] block">PROGRAM / CONTRACT ADDRESS</span>
+            <span className="text-cyan-400 font-bold truncate block text-[11px]">
+              {bcInfo?.contractAddress || "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"}
+            </span>
+          </div>
+
+          <div className="bg-[#040609] p-3 rounded-xl border border-gray-800">
+            <span className="text-gray-400 text-[10px] block">SLOT / BLOCK NUMBER</span>
+            <span className="text-emerald-400 font-bold">{bcInfo?.blockNumber ? `#${bcInfo.blockNumber}` : "Pending Registration"}</span>
+          </div>
+
+          <div className="bg-[#040609] p-3 rounded-xl border border-gray-800 col-span-1 sm:col-span-2 lg:col-span-3">
+            <div className="flex items-center justify-between text-gray-400 mb-1">
+              <span className="text-[10px]">SHA-256 CANONICAL EVIDENCE HASH:</span>
+              {bcInfo?.evidenceHash && (
+                <button 
+                  onClick={() => handleCopy(bcInfo.evidenceHash, "dashEvHash")}
+                  className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer text-[10px]"
+                >
+                  {copiedField === "dashEvHash" ? <FaCheck className="text-emerald-400" /> : <FaCopy />}
+                  <span>{copiedField === "dashEvHash" ? "COPIED" : "COPY"}</span>
+                </button>
+              )}
+            </div>
+            <span className="text-emerald-400 font-mono font-bold break-all block text-[11px] bg-emerald-950/20 p-2 rounded border border-emerald-500/30">
+              {bcInfo?.evidenceHash || "SHA-256 fingerprint generated upon clicking Store on Blockchain"}
+            </span>
+          </div>
+
+          {bcInfo?.transactionHash && (
+            <div className="bg-[#040609] p-3 rounded-xl border border-gray-800 col-span-1 sm:col-span-2 lg:col-span-3">
+              <div className="flex items-center justify-between text-gray-400 mb-1">
+                <span className="text-[10px]">BLOCKCHAIN TRANSACTION SIGNATURE / HASH:</span>
+                <a
+                  href={getExplorerUrl(bcInfo.transactionHash, bcInfo.network)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 text-[10px]"
+                >
+                  <span>EXPLORER</span>
+                  <FaExternalLinkAlt />
+                </a>
+              </div>
+              <span className="text-cyan-400 font-mono font-bold break-all block text-[11px] bg-cyan-950/20 p-2 rounded border border-cyan-500/30">
+                {bcInfo.transactionHash}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -193,15 +435,249 @@ const ScanningDetails = ({ result, onReset }) => {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-4 pt-2">
-        <button
-          onClick={onReset}
-          className="flex-1 bg-[#00ff66] text-black font-bold font-['Share_Tech_Mono',monospace] text-xs py-3.5 px-6 rounded-xl hover:bg-[#00ff66]/90 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-[0_0_20px_rgba(0,255,102,0.3)]"
-        >
-          <FaRedo className="text-xs" />
-          <span>ANALYZE ANOTHER PROFILE</span>
-        </button>
-      </div>
+      {verificationResult && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className={`bg-[#090e17] border rounded-2xl max-w-xl w-full p-6 space-y-5 shadow-[0_0_50px_rgba(0,0,0,0.5)] relative font-mono ${
+            verificationResult.verified ? "border-emerald-500/50 shadow-emerald-500/20" : "border-red-500/50 shadow-red-500/20"
+          }`}>
+            <div className="flex items-center justify-between border-b border-gray-800 pb-3">
+              <div className="flex items-center gap-3">
+                {verificationResult.verified ? (
+                  <FaCheckCircle className="text-2xl text-emerald-400" />
+                ) : (
+                  <FaTimesCircle className="text-2xl text-red-500" />
+                )}
+                <div>
+                  <h3 className="text-base font-bold font-['Share_Tech_Mono',monospace] text-white">
+                    {verificationResult.verified ? "EVIDENCE INTEGRITY VERIFIED" : "EVIDENCE INTEGRITY MISMATCH"}
+                  </h3>
+                  <span className="text-xs text-gray-400">SCAN ID: {verificationResult.scanId}</span>
+                </div>
+              </div>
+              <button 
+                onClick={() => setVerificationResult(null)}
+                className="text-gray-400 hover:text-white p-2 rounded-lg bg-gray-900 border border-gray-800 cursor-pointer"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="bg-[#040609] p-3 rounded-xl border border-gray-800 space-y-1">
+                <span className="text-gray-400 text-[10px] block">STORED ON-CHAIN EVIDENCE HASH:</span>
+                <span className="text-emerald-400 font-mono font-bold break-all block text-[11px]">
+                  {verificationResult.storedHash || "N/A"}
+                </span>
+              </div>
+
+              <div className="bg-[#040609] p-3 rounded-xl border border-gray-800 space-y-1">
+                <span className="text-gray-400 text-[10px] block">RE-CALCULATED OFF-CHAIN HASH:</span>
+                <span className="text-cyan-400 font-mono font-bold break-all block text-[11px]">
+                  {verificationResult.calculatedHash || "N/A"}
+                </span>
+              </div>
+
+              {verificationResult.transactionHash && (
+                <div className="bg-[#040609] p-3 rounded-xl border border-gray-800 space-y-1">
+                  <span className="text-gray-400 text-[10px] block">BLOCKCHAIN TRANSACTION SIGNATURE / HASH:</span>
+                  <a
+                    href={getExplorerUrl(verificationResult.transactionHash, bcInfo?.network)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-cyan-400 font-mono font-bold break-all hover:underline flex items-center gap-1 text-[11px]"
+                  >
+                    <span>{verificationResult.transactionHash}</span>
+                    <FaExternalLinkAlt className="shrink-0" />
+                  </a>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setVerificationResult(null)}
+                className="bg-emerald-500 text-black font-bold font-['Share_Tech_Mono',monospace] text-xs py-2.5 px-5 rounded-xl hover:bg-emerald-400 transition-all cursor-pointer"
+              >
+                CLOSE VERIFICATION
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {blockchainData && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-[#090e17] border border-cyan-500/50 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-[0_0_50px_rgba(0,229,255,0.25)] relative font-mono">
+            <div className="flex items-center justify-between border-b border-cyan-500/30 pb-4">
+              <div className="flex items-center gap-3 text-cyan-400">
+                <FaCube className="text-2xl animate-pulse" />
+                <div>
+                  <h3 className="text-lg font-bold font-['Share_Tech_Mono',monospace] text-white">BLOCKCHAIN LEDGER ANCHOR</h3>
+                  <span className="text-xs text-gray-400">SHA-256 PROOF OF FORENSIC METRICS</span>
+                </div>
+              </div>
+              <button 
+                onClick={() => setBlockchainData(null)}
+                className="text-gray-400 hover:text-white p-2 rounded-lg bg-gray-900 border border-gray-800 cursor-pointer"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="bg-[#040609] p-3.5 rounded-xl border border-cyan-500/20 space-y-1">
+                <div className="flex items-center justify-between text-gray-400">
+                  <span>SHA-256 CANONICAL EVIDENCE HASH:</span>
+                  <button 
+                    onClick={() => handleCopy(bcInfo?.evidenceHash, "sha256")} 
+                    className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer"
+                  >
+                    {copiedField === "sha256" ? <FaCheck className="text-emerald-400" /> : <FaCopy />}
+                    <span>{copiedField === "sha256" ? "COPIED!" : "COPY"}</span>
+                  </button>
+                </div>
+                <div className="text-white font-mono font-bold break-all text-[11px] bg-cyan-950/20 p-2 rounded border border-cyan-500/30">
+                  {bcInfo?.evidenceHash}
+                </div>
+              </div>
+
+              <div className="bg-[#040609] p-3.5 rounded-xl border border-cyan-500/20 space-y-1">
+                <div className="flex items-center justify-between text-gray-400">
+                  <span>BLOCKCHAIN TRANSACTION HASH (TxHash):</span>
+                  <button 
+                    onClick={() => handleCopy(bcInfo?.transactionHash, "txHash")} 
+                    className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 cursor-pointer"
+                  >
+                    {copiedField === "txHash" ? <FaCheck className="text-emerald-400" /> : <FaCopy />}
+                    <span>{copiedField === "txHash" ? "COPIED!" : "COPY"}</span>
+                  </button>
+                </div>
+                <div className="text-emerald-400 font-mono font-bold break-all text-[11px] bg-emerald-950/20 p-2 rounded border border-emerald-500/30">
+                  {bcInfo?.transactionHash}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div className="bg-[#040609] p-3 rounded-xl border border-gray-800">
+                  <span className="text-gray-400 text-[10px] block">SLOT / BLOCK NUMBER</span>
+                  <span className="text-white font-bold text-xs">#{bcInfo?.blockNumber}</span>
+                </div>
+                <div className="bg-[#040609] p-3 rounded-xl border border-gray-800">
+                  <span className="text-gray-400 text-[10px] block">NETWORK</span>
+                  <span className="text-cyan-400 font-bold text-xs">{bcInfo?.network}</span>
+                </div>
+                <div className="bg-[#040609] p-3 rounded-xl border border-gray-800">
+                  <span className="text-gray-400 text-[10px] block">PROGRAM / CONTRACT ADDRESS</span>
+                  <span className="text-gray-300 font-bold text-[10px] truncate block">{bcInfo?.contractAddress}</span>
+                </div>
+                <div className="bg-[#040609] p-3 rounded-xl border border-gray-800">
+                  <span className="text-gray-400 text-[10px] block">LEDGER STATUS</span>
+                  <span className="text-emerald-400 font-bold text-xs uppercase">{bcInfo?.status || "CONFIRMED"}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center pt-2">
+              <a
+                href={getExplorerUrl(bcInfo?.transactionHash, bcInfo?.network)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-cyan-400 hover:underline flex items-center gap-1 font-mono"
+              >
+                <span>VIEW ON BLOCKCHAIN EXPLORER</span>
+                <FaExternalLinkAlt />
+              </a>
+
+              <button
+                onClick={() => setBlockchainData(null)}
+                className="bg-cyan-500 text-black font-bold font-['Share_Tech_Mono',monospace] text-xs py-2.5 px-5 rounded-xl hover:bg-cyan-400 transition-all cursor-pointer"
+              >
+                CLOSE BLOCKCHAIN PROOF
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isReporting && !reportData && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-[#090e17] border border-red-500/50 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-[0_0_50px_rgba(239,68,68,0.25)] relative font-mono">
+            <div className="flex items-center justify-between border-b border-red-500/30 pb-3">
+              <div className="flex items-center gap-2 text-red-400">
+                <FaShieldAlt className="text-xl" />
+                <h3 className="text-base font-bold font-['Share_Tech_Mono',monospace] text-white">REPORT FAKE ACCOUNT TAKEDOWN</h3>
+              </div>
+              <button 
+                onClick={() => setIsReporting(false)}
+                className="text-gray-400 hover:text-white p-1.5 rounded-lg bg-gray-900 border border-gray-800 cursor-pointer"
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-300">
+              Select the primary forensic violation for <span className="text-white font-bold">{result.url}</span>:
+            </p>
+
+            <select
+              value={reportReason}
+              onChange={(e) => setReportReason(e.target.value)}
+              className="w-full bg-[#040609] border border-red-500/40 text-white rounded-xl p-3 text-xs focus:outline-none focus:border-red-400 font-mono"
+            >
+              <option value="Automated Neural Bot Detection">Automated Neural Bot Detection</option>
+              <option value="Impersonation / Fake Celebrity Profile">Impersonation / Fake Profile</option>
+              <option value="High Fake Follower Manipulation">High Fake Follower Manipulation</option>
+              <option value="Suspicious Night Spikes Activity">Suspicious Night Spikes Activity</option>
+            </select>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                onClick={() => setIsReporting(false)}
+                className="flex-1 bg-gray-900 border border-gray-800 text-gray-400 font-bold font-['Share_Tech_Mono',monospace] text-xs py-2.5 rounded-xl hover:bg-gray-800 transition-all cursor-pointer"
+              >
+                CANCEL
+              </button>
+              <button
+                onClick={handleReportAccount}
+                className="flex-1 bg-red-600 text-white font-bold font-['Share_Tech_Mono',monospace] text-xs py-2.5 rounded-xl hover:bg-red-500 transition-all cursor-pointer shadow-[0_0_15px_rgba(239,68,68,0.4)]"
+              >
+                SUBMIT TAKEDOWN FLAG
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {reportData && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-[#090e17] border border-emerald-500/50 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-[0_0_50px_rgba(16,185,129,0.25)] relative font-mono text-center">
+            <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center mx-auto text-emerald-400 text-3xl">
+              <FaCheckCircle />
+            </div>
+
+            <div>
+              <h3 className="text-lg font-bold font-['Share_Tech_Mono',monospace] text-white">TAKEDOWN FLAG SUBMITTED</h3>
+              <p className="text-xs text-gray-400 mt-1">FORENSIC CASE ID: <span className="text-cyan-400 font-bold">{reportData.caseId}</span></p>
+            </div>
+
+            <div className="bg-[#040609] p-3 rounded-xl border border-gray-800 text-left text-xs space-y-1">
+              <div className="text-gray-400">STATUS: <span className="text-emerald-400 font-bold">{reportData.status}</span></div>
+              <div className="text-gray-400">REASON: <span className="text-white">{reportData.reason}</span></div>
+              <div className="text-gray-400">TIMESTAMP: <span className="text-gray-300">{reportData.timestamp}</span></div>
+            </div>
+
+            <button
+              onClick={() => {
+                setReportData(null);
+                setIsReporting(false);
+              }}
+              className="w-full bg-emerald-500 text-black font-bold font-['Share_Tech_Mono',monospace] text-xs py-3 rounded-xl hover:bg-emerald-400 transition-all cursor-pointer shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+            >
+              DONE
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 };
